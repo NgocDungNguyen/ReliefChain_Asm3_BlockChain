@@ -1,22 +1,43 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { RainbowKitProvider, ConnectButton, getDefaultConfig } from '@rainbow-me/rainbowkit';
+import {
+  RainbowKitProvider,
+  ConnectButton,
+  getDefaultConfig,
+} from '@rainbow-me/rainbowkit';
 import { WagmiProvider, useAccount, useWriteContract } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { hardhat } from 'wagmi/chains';
 import '@rainbow-me/rainbowkit/styles.css';
+import './App.css';
 import ReliefChainABI from './ReliefChainABI.json';
 
-// Wagmi config for local Hardhat
+// ─── Wagmi config for local Hardhat ──────────────────────────────────────────
+// projectId is intentionally a local placeholder; WalletConnect is not used
+// in the demo — MetaMask injected provider is the only required wallet.
 const config = getDefaultConfig({
   appName: 'ReliefChain',
-  projectId: 'reliefchain-local',
+  projectId: 'reliefchain-local-demo',
   chains: [hardhat],
 });
 
 const queryClient = new QueryClient();
 
-const contractAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
+// Reads from Vite env var; falls back to the currently-deployed local address
+const CONTRACT_ADDRESS =
+  import.meta.env.VITE_CONTRACT_ADDRESS ||
+  '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9';
+
+// ─── Status badge helper ──────────────────────────────────────────────────────
+function StatusBadge({ paid, approved }) {
+  if (paid)
+    return <span className="badge badge-paid">Paid</span>;
+  if (approved)
+    return <span className="badge badge-approved">Approved</span>;
+  return <span className="badge badge-pending">Pending</span>;
+}
+
+// ─── Main app content (requires wallet context) ───────────────────────────────
 function AppContent() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
@@ -24,29 +45,35 @@ function AppContent() {
   const [campaignName, setCampaignName] = useState('');
   const [totalDonations, setTotalDonations] = useState('0');
   const [contractBalance, setContractBalance] = useState('0');
-  const [donationAmount, setDonationAmount] = useState('');
   const [requests, setRequests] = useState([]);
+  const [donationAmount, setDonationAmount] = useState('');
   const [requestAmount, setRequestAmount] = useState('');
   const [evidenceCID, setEvidenceCID] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
 
+  // ── Load on-chain data ──────────────────────────────────────────────────────
   const loadContractData = async () => {
     if (!window.ethereum) return;
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(contractAddress, ReliefChainABI, provider);
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        ReliefChainABI,
+        provider
+      );
 
-      const name = await contract.campaignName();
-      const donations = await contract.totalDonations();
-      const balance = await provider.getBalance(contractAddress);
-      const nextId = await contract.nextRequestId();
+      const [name, donations, balance, nextId] = await Promise.all([
+        contract.campaignName(),
+        contract.totalDonations(),
+        provider.getBalance(CONTRACT_ADDRESS),
+        contract.nextRequestId(),
+      ]);
 
       setCampaignName(name);
       setTotalDonations(ethers.formatEther(donations));
       setContractBalance(ethers.formatEther(balance));
-
-      console.log("Next request ID:", nextId.toString());
 
       const reqs = [];
       for (let i = 0; i < Number(nextId); i++) {
@@ -57,7 +84,8 @@ function AppContent() {
             organizer: req[1],
             amount: ethers.formatEther(req[2]),
             evidenceCID: req[3],
-            approvals: req[4].toNumber(),
+            // req[4] is BigInt in ethers v6 — must use Number()
+            approvals: Number(req[4]),
             approved: req[5],
             paid: req[6],
           });
@@ -67,7 +95,7 @@ function AppContent() {
       }
       setRequests(reqs.reverse());
     } catch (err) {
-      console.error('Top-level error in loadContractData:', err);
+      console.error('Error loading contract data:', err);
     }
   };
 
@@ -77,23 +105,29 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [isConnected]);
 
+  // ── Transaction helpers ─────────────────────────────────────────────────────
+  const notify = (msg) => {
+    setStatusMsg(msg);
+    setTimeout(() => setStatusMsg(''), 5000);
+  };
+
   const handleDonate = async () => {
     if (!donationAmount) return;
     setLoading(true);
     try {
       await writeContractAsync({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         abi: ReliefChainABI,
         functionName: 'donate',
         value: ethers.parseEther(donationAmount),
         gasLimit: 500000n,
       });
-      alert('Donation successful!');
+      notify('Donation successful!');
       setDonationAmount('');
       loadContractData();
     } catch (err) {
       console.error(err);
-      alert('Donation failed: ' + err.message);
+      notify('Donation failed: ' + (err.shortMessage || err.message));
     }
     setLoading(false);
   };
@@ -103,19 +137,19 @@ function AppContent() {
     setLoading(true);
     try {
       await writeContractAsync({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         abi: ReliefChainABI,
         functionName: 'submitRequest',
         args: [ethers.parseEther(requestAmount), evidenceCID],
         gasLimit: 500000n,
       });
-      alert('Request submitted!');
+      notify('Request submitted successfully!');
       setRequestAmount('');
       setEvidenceCID('');
       loadContractData();
     } catch (err) {
       console.error(err);
-      alert('Submit failed: ' + err.message);
+      notify('Submit failed: ' + (err.shortMessage || err.message));
     }
     setLoading(false);
   };
@@ -125,17 +159,17 @@ function AppContent() {
     setLoading(true);
     try {
       await writeContractAsync({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         abi: ReliefChainABI,
         functionName: 'voteOnRequest',
         args: [selectedRequestId, approve],
         gasLimit: 500000n,
       });
-      alert('Vote cast!');
+      notify(`Vote cast: ${approve ? 'Approved' : 'Rejected'}`);
       loadContractData();
     } catch (err) {
       console.error(err);
-      alert('Vote failed: ' + err.message);
+      notify('Vote failed: ' + (err.shortMessage || err.message));
     }
     setLoading(false);
   };
@@ -144,146 +178,298 @@ function AppContent() {
     setLoading(true);
     try {
       await writeContractAsync({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         abi: ReliefChainABI,
         functionName: 'claimApprovedFunds',
         args: [id],
         gasLimit: 500000n,
       });
-      alert('Funds claimed!');
+      notify('Funds claimed successfully!');
       loadContractData();
     } catch (err) {
       console.error(err);
-      alert('Claim failed: ' + err.message);
+      notify('Claim failed: ' + (err.shortMessage || err.message));
     }
     setLoading(false);
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>{campaignName || 'ReliefChain'}</h1>
-        <ConnectButton />
-      </div>
-
-      {!isConnected ? (
-        <p>Connect your wallet to participate.</p>
-      ) : (
-        <>
-          <div style={{ background: '#f0f0f0', padding: '15px', borderRadius: '8px', margin: '20px 0' }}>
-            <p><strong>Your Address:</strong> {address}</p>
-            <p><strong>Total Donations:</strong> {totalDonations} ETH</p>
-            <p><strong>Contract Balance:</strong> {contractBalance} ETH</p>
+    <div className="app">
+      {/* ── Header ── */}
+      <header className="header">
+        <div className="header-inner">
+          <div className="header-brand">
+            <span className="header-logo">⛓</span>
+            <div>
+              <h1 className="header-title">ReliefChain</h1>
+              <p className="header-subtitle">
+                {campaignName || 'Blockchain Transparency for Disaster Aid'}
+              </p>
+            </div>
           </div>
+          <ConnectButton />
+        </div>
+      </header>
 
-          {/* Donation Section */}
-          <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2>Make a Donation</h2>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount in ETH"
-              value={donationAmount}
-              onChange={(e) => setDonationAmount(e.target.value)}
-              style={{ padding: '8px', marginRight: '10px', width: '200px' }}
-            />
-            <button onClick={handleDonate} disabled={loading} style={{ padding: '8px 16px' }}>
-              Donate
-            </button>
-          </div>
+      <main className="main">
+        {/* ── Status toast ── */}
+        {statusMsg && (
+          <div className="toast">{statusMsg}</div>
+        )}
 
-          {/* Request Section */}
-          <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2>Submit Reimbursement Request (Organizer)</h2>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount in ETH"
-              value={requestAmount}
-              onChange={(e) => setRequestAmount(e.target.value)}
-              style={{ padding: '8px', marginRight: '10px', width: '150px' }}
-            />
-            <input
-              type="text"
-              placeholder="IPFS CID (e.g., Qm...)"
-              value={evidenceCID}
-              onChange={(e) => setEvidenceCID(e.target.value)}
-              style={{ padding: '8px', marginRight: '10px', width: '300px' }}
-            />
-            <button onClick={handleSubmitRequest} disabled={loading} style={{ padding: '8px 16px' }}>
-              Submit Request
-            </button>
+        {!isConnected ? (
+          /* ── Not connected ── */
+          <div className="hero">
+            <div className="hero-icon">🌏</div>
+            <h2 className="hero-title">Transparent Disaster Aid for Vietnam</h2>
+            <p className="hero-desc">
+              ReliefChain records every donation, reimbursement request, and
+              validator vote on-chain. Connect your wallet to participate.
+            </p>
+            <div className="hero-steps">
+              <div className="step">
+                <span className="step-num">1</span>
+                <span>Donors fund the campaign</span>
+              </div>
+              <div className="step">
+                <span className="step-num">2</span>
+                <span>Organizers submit requests with IPFS evidence</span>
+              </div>
+              <div className="step">
+                <span className="step-num">3</span>
+                <span>Validators vote 2-of-3 to approve</span>
+              </div>
+              <div className="step">
+                <span className="step-num">4</span>
+                <span>Funds release automatically on approval</span>
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            {/* ── Stats dashboard ── */}
+            <section className="stats-grid">
+              <div className="stat-card">
+                <p className="stat-label">Your Address</p>
+                <p className="stat-value mono">
+                  {address.slice(0, 6)}…{address.slice(-4)}
+                </p>
+              </div>
+              <div className="stat-card accent">
+                <p className="stat-label">Total Donated</p>
+                <p className="stat-value">{parseFloat(totalDonations).toFixed(4)} ETH</p>
+              </div>
+              <div className="stat-card accent">
+                <p className="stat-label">Contract Balance</p>
+                <p className="stat-value">{parseFloat(contractBalance).toFixed(4)} ETH</p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-label">Requests</p>
+                <p className="stat-value">{requests.length}</p>
+              </div>
+            </section>
 
-          {/* Validator Section */}
-          <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2>Validator Actions</h2>
-            <select
-              value={selectedRequestId}
-              onChange={(e) => setSelectedRequestId(e.target.value)}
-              style={{ padding: '8px', marginRight: '10px', width: '100px' }}
-            >
-              <option value="">Select ID</option>
-              {requests.map((req) => (
-                <option key={req.id} value={req.id}>{req.id}</option>
-              ))}
-            </select>
-            <button onClick={() => handleVote(true)} disabled={loading || !selectedRequestId} style={{ padding: '8px 16px', marginRight: '10px' }}>
-              Approve
-            </button>
-            <button onClick={() => handleVote(false)} disabled={loading || !selectedRequestId} style={{ padding: '8px 16px' }}>
-              Reject
-            </button>
-          </div>
+            {/* ── Action cards ── */}
+            <section className="action-grid">
 
-          {/* Requests List */}
-          <div style={{ margin: '20px 0', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2>Recent Requests</h2>
-            {requests.length === 0 ? (
-              <p>No requests yet.</p>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Organizer</th>
-                    <th>Amount</th>
-                    <th>Evidence</th>
-                    <th>Approvals</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.map((req) => (
-                    <tr key={req.id} style={{ borderBottom: '1px solid #eee' }}>
-                      <td>{req.id}</td>
-                      <td>{req.organizer.slice(0, 6)}...{req.organizer.slice(-4)}</td>
-                      <td>{req.amount} ETH</td>
-                      <td>
-                        <a href={`https://ipfs.io/ipfs/${req.evidenceCID}`} target="_blank" rel="noopener noreferrer">
-                          View
-                        </a>
-                      </td>
-                      <td>{req.approvals}/3</td>
-                      <td>{req.paid ? 'Paid' : req.approved ? 'Approved' : 'Pending'}</td>
-                      <td>
-                        {req.approved && !req.paid && (
-                          <button onClick={() => handleClaim(req.id)} disabled={loading}>Claim</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
+              {/* Donate */}
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-icon">💚</span>
+                  <h2 className="card-title">Make a Donation</h2>
+                </div>
+                <p className="card-desc">
+                  Send ETH/MATIC to the campaign. Every donation is recorded
+                  on-chain instantly.
+                </p>
+                <div className="input-row">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Amount in ETH"
+                    value={donationAmount}
+                    onChange={(e) => setDonationAmount(e.target.value)}
+                    className="input"
+                  />
+                  <button
+                    onClick={handleDonate}
+                    disabled={loading || !donationAmount}
+                    className="btn btn-primary"
+                  >
+                    {loading ? <span className="spinner" /> : 'Donate'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit Request */}
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-icon">📋</span>
+                  <h2 className="card-title">Submit Reimbursement Request</h2>
+                </div>
+                <p className="card-desc">
+                  Organizers: upload your evidence to IPFS (e.g. via Pinata),
+                  then submit the CID here.
+                </p>
+                <div className="input-col">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Requested amount in ETH"
+                    value={requestAmount}
+                    onChange={(e) => setRequestAmount(e.target.value)}
+                    className="input"
+                  />
+                  <input
+                    type="text"
+                    placeholder="IPFS CID (e.g. QmXyZ...)"
+                    value={evidenceCID}
+                    onChange={(e) => setEvidenceCID(e.target.value)}
+                    className="input"
+                  />
+                  <button
+                    onClick={handleSubmitRequest}
+                    disabled={loading || !requestAmount || !evidenceCID}
+                    className="btn btn-primary"
+                  >
+                    {loading ? <span className="spinner" /> : 'Submit Request'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Validator */}
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-icon">🗳</span>
+                  <h2 className="card-title">Validator Actions</h2>
+                </div>
+                <p className="card-desc">
+                  Validators: select a request, review its IPFS evidence, then
+                  cast your vote. 2-of-3 approvals releases the funds.
+                </p>
+                <div className="input-col">
+                  <select
+                    value={selectedRequestId}
+                    onChange={(e) => setSelectedRequestId(e.target.value)}
+                    className="input"
+                  >
+                    <option value="">Select request ID…</option>
+                    {requests.map((req) => (
+                      <option key={req.id} value={req.id}>
+                        #{req.id} — {req.amount} ETH
+                        {req.approved ? ' ✔' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="vote-row">
+                    <button
+                      onClick={() => handleVote(true)}
+                      disabled={loading || !selectedRequestId}
+                      className="btn btn-approve"
+                    >
+                      {loading ? <span className="spinner" /> : '✔ Approve'}
+                    </button>
+                    <button
+                      onClick={() => handleVote(false)}
+                      disabled={loading || !selectedRequestId}
+                      className="btn btn-reject"
+                    >
+                      {loading ? <span className="spinner" /> : '✘ Reject'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </section>
+
+            {/* ── Requests table ── */}
+            <section className="card table-card">
+              <div className="card-header">
+                <span className="card-icon">📊</span>
+                <h2 className="card-title">Reimbursement Requests</h2>
+              </div>
+
+              {requests.length === 0 ? (
+                <p className="empty-msg">No requests yet. Organizers can submit one above.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Organizer</th>
+                        <th>Amount (ETH)</th>
+                        <th>Evidence</th>
+                        <th>Votes</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {requests.map((req) => (
+                        <tr key={req.id}>
+                          <td className="mono">#{req.id}</td>
+                          <td className="mono">
+                            {req.organizer.slice(0, 6)}…{req.organizer.slice(-4)}
+                          </td>
+                          <td>{req.amount}</td>
+                          <td>
+                            <a
+                              href={`https://ipfs.io/ipfs/${req.evidenceCID}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="link"
+                            >
+                              View ↗
+                            </a>
+                          </td>
+                          <td>
+                            <span className={`vote-count ${req.approvals >= 2 ? 'vote-met' : ''}`}>
+                              {req.approvals}/3
+                            </span>
+                          </td>
+                          <td>
+                            <StatusBadge paid={req.paid} approved={req.approved} />
+                          </td>
+                          <td>
+                            {req.approved && !req.paid && (
+                              <button
+                                onClick={() => handleClaim(req.id)}
+                                disabled={loading}
+                                className="btn btn-sm btn-claim"
+                              >
+                                Claim
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* ── Footer note ── */}
+            <footer className="footer">
+              <p>
+                Contract:{' '}
+                <span className="mono">{CONTRACT_ADDRESS}</span>
+                {' · '}
+                All transactions are publicly verifiable on-chain.
+              </p>
+            </footer>
+          </>
+        )}
+      </main>
     </div>
   );
 }
 
+// ─── Root wrapper ─────────────────────────────────────────────────────────────
 function App() {
   return (
     <WagmiProvider config={config}>

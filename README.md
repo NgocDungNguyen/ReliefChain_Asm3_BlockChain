@@ -46,7 +46,7 @@ ReliefChain is a smart contract‑based donation platform that enforces **condit
 | Step                            | Real‑World Action                                                                                                          | Blockchain Execution                                                                                                                                                                                             |
 | :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1. Fundraising**        | Thousands of donors across Vietnam and abroad contribute via bank transfer or MoMo.                                         | Each donation is sent to the `ReliefChain` smart contract. The total amount raised is visible on‑chain in real time.                                                                                          |
-| **2. Aid Procurement**    | A Red Cross volunteer in Quang Ninh purchases 500 emergency kits from a local supplier for**₫50 million**.           | The volunteer uploads the receipt and a photo of the distribution to**IPFS** and submits a **reimbursement request** to the contract with the IPFS link (`QmXyZ...`).                              |
+| **2. Aid Procurement**    | A Red Cross volunteer in Quang Ninh purchases 500 emergency kits from a local supplier for**₫50 million**.                 | The volunteer uploads the receipt and a photo of the distribution to**IPFS** and submits a **reimbursement request** to the contract with the IPFS link (`QmXyZ...`).                              |
 | **3. Validation**         | A committee of three trusted local entities (e.g., Commune People's Committee, Fatherland Front, NGO) reviews the evidence. | Each validator uses their own MetaMask wallet to call `voteOnRequest`. The smart contract tracks approvals.                                                                                                    |
 | **4. Approval & Payment** | The committee agrees the expense is legitimate.                                                                             | When**2 of the 3** validators approve, the request is marked **Approved**. The volunteer then calls `claimApprovedFunds` to instantly receive the **₫50 million** in MATIC to their wallet. |
 | **5. Audit**              | The government and the public ask for accountability.                                                                       | Every donation, every request, every vote, and every payout is**immutable and publicly visible** on the Polygon blockchain (or local Hardhat explorer).                                                    |
@@ -76,44 +76,36 @@ graph TD
     G --> I[Organizer claims funds];
     I --> J[Funds transferred to organizer];
 ```
+
 _Detailed UI steps for the demo:_
 
-1.  Donate – Enter `0.5`, set gas limit to `500000`, confirm.
-    
-2.  Request – Enter `0.2`, CID `QmTest123`, confirm.
-    
-3.  Vote (Validator 1) – Select ID `0`, click Approve, confirm.
-    
-4.  Vote (Validator 2) – Switch MetaMask account, refresh page, select ID `0`, click Approve.
-    
-5.  Claim – Switch back to Organizer account, click Claim.
-    
+1. Donate – Enter `0.5`, set gas limit to `500000`, confirm.
+2. Request – Enter `0.2`, CID `QmTest123`, confirm.
+3. Vote (Validator 1) – Select ID `0`, click Approve, confirm.
+4. Vote (Validator 2) – Switch MetaMask account, refresh page, select ID `0`, click Approve.
+5. Claim – Switch back to Organizer account, click Claim.
 
-* * *
+---
 
 ## ⚙️ Technical Architecture
 
-| Component | Technology | Purpose |
-| --- | --- | --- |
-| Blockchain | Polygon Amoy Testnet (and Hardhat Local) | Low‑cost, EVM‑compatible test environment. |
-| Smart Contracts | Solidity 0.8.20 + OpenZeppelin (AccessControl, ReentrancyGuard) | Core campaign logic, role management, fund escrow. |
-| Development | Hardhat 2.x | Compilation, testing, deployment. |
-| Frontend | React 18 + Vite | User interface. |
-| Wallet Connection | RainbowKit + wagmi + ethers.js v5 | Seamless MetaMask integration. |
-| Decentralised Storage | IPFS (via Pinata) | Immutable storage of evidence files (receipts, photos). |
+| Component             | Technology                                                      | Purpose                                                 |
+| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------- |
+| Blockchain            | Polygon Amoy Testnet (and Hardhat Local)                        | Low‑cost, EVM‑compatible test environment.            |
+| Smart Contracts       | Solidity 0.8.20 + OpenZeppelin (AccessControl, ReentrancyGuard) | Core campaign logic, role management, fund escrow.      |
+| Development           | Hardhat 2.x                                                     | Compilation, testing, deployment.                       |
+| Frontend              | React 18 + Vite                                                 | User interface.                                         |
+| Wallet Connection     | RainbowKit + wagmi + ethers.js v5                               | Seamless MetaMask integration.                          |
+| Decentralised Storage | IPFS (via Pinata)                                               | Immutable storage of evidence files (receipts, photos). |
 
 ### 🔐 Security Features
 
--   ReentrancyGuard on all fund‑transfer functions.
-    
--   Role‑Based Access Control (RBAC) for Organizers and Validators.
-    
--   Checks‑Effects‑Interactions pattern followed.
-    
--   No upgradeable proxies (reduced attack surface).
-    
+- ReentrancyGuard on all fund‑transfer functions.
+- Role‑Based Access Control (RBAC) for Organizers and Validators.
+- Checks‑Effects‑Interactions pattern followed.
+- No upgradeable proxies (reduced attack surface).
 
-* * *
+---
 
 ## 🚀 Local Development Setup (How We Built It)
 
@@ -121,18 +113,15 @@ Follow these steps to run the project on your Windows machine.
 
 ### 📋 Prerequisites
 
--   Node.js v18+ and npm
-    
--   MetaMask browser extension
-    
--   Git (optional)
-    
+- Node.js v18+ and npm
+- MetaMask browser extension
+- Git (optional)
 
 ### 1️⃣ Clone & Install Dependencies
 
 powershell
 
-git clone <your-repo-url> relief-chain
+git clone `<your-repo-url>` relief-chain
 cd relief-chain
 
 \# Backend (Hardhat)
@@ -154,7 +143,6 @@ PINATA\_SECRET\_KEY=
 
 `frontend/.env`
 
-
 VITE\_CONTRACT\_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
 
 ### 3️⃣ Start Local Hardhat Node
@@ -175,7 +163,6 @@ Copy the deployed contract address and update `frontend/.env` (or hardcode it 
 
 ### 5️⃣ Launch Frontend
 
-
 cd frontend
 npm run dev
 
@@ -185,7 +172,7 @@ Visit `http://localhost:5173`. Connect MetaMask to Hardhat Local (Chain ID `
 
 Follow the Complete User Flow section above to donate, request, vote, and claim.
 
-* * *
+---
 
 ## 📁 Project Structure
 
@@ -209,41 +196,29 @@ relief-chain/
 │   └── index.html
 └── README.md                        # This file
 
-* * *
+---
 
 ## 🔮 Production Roadmap (Beyond the Demo)
 
--   Validator Governance: Replace hardcoded validators with a Soulbound Token (SBT) system that verifies official registration with Vietnamese relief authorities.
-    
--   Multi‑Campaign Factory: Deploy a factory contract that creates isolated campaign instances for each disaster event.
-    
--   IPFS Evidence Verification: Add a Pinata upload widget in the frontend for seamless evidence submission.
-    
--   Amoy Testnet Deployment: Once sufficient test MATIC is obtained, deploy to Polygon Amoy for a live public demonstration.
-    
+- Validator Governance: Replace hardcoded validators with a Soulbound Token (SBT) system that verifies official registration with Vietnamese relief authorities.
+- Multi‑Campaign Factory: Deploy a factory contract that creates isolated campaign instances for each disaster event.
+- IPFS Evidence Verification: Add a Pinata upload widget in the frontend for seamless evidence submission.
+- Amoy Testnet Deployment: Once sufficient test MATIC is obtained, deploy to Polygon Amoy for a live public demonstration.
 
-* * *
+---
 
 ## 📚 References
 
-1.  Luu, C., von Meding, J., & Mojahedi, M. (2019). Analyzing Vietnam's national disaster loss database. _Int. J. Disaster Risk Reduct._
-    
-2.  World Bank Group. (2022). _Vietnam Country Climate and Development Report_.
-    
-3.  IFRC. (2022). _Vietnam: Floods – Final Report_.
-    
-4.  Center for Disaster Philanthropy. (2024). _2024 Super Typhoon Yagi_.
-    
-5.  Nguyen, L. & Thu, N. (2021). Vietnamese celebs face scandal over philanthropy. _VnExpress_.
-    
-6.  Farooq, M. S., et al. (2020). A framework to make charity collection transparent using blockchain. _Comput. Electr. Eng._
-    
-7.  OpenZeppelin Contracts Documentation.
-    
-8.  Polygon Amoy Testnet Documentation.
-    
+1. Luu, C., von Meding, J., & Mojahedi, M. (2019). Analyzing Vietnam's national disaster loss database. _Int. J. Disaster Risk Reduct._
+2. World Bank Group. (2022). _Vietnam Country Climate and Development Report_.
+3. IFRC. (2022). _Vietnam: Floods – Final Report_.
+4. Center for Disaster Philanthropy. (2024). _2024 Super Typhoon Yagi_.
+5. Nguyen, L. & Thu, N. (2021). Vietnamese celebs face scandal over philanthropy. _VnExpress_.
+6. Farooq, M. S., et al. (2020). A framework to make charity collection transparent using blockchain. _Comput. Electr. Eng._
+7. OpenZeppelin Contracts Documentation.
+8. Polygon Amoy Testnet Documentation.
 
-* * *
+---
 
-© 2026 HN\_Group 4 – RMIT University Vietnam  
+© 2026 HN\_Group 4 – RMIT University Vietnam
 _This project is developed for educational purposes on test networks only._
